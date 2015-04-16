@@ -20,6 +20,7 @@ type ipc struct {
 	Count     int64
 	Time      time.Time
 	TimeCount int64
+	TimeEmail time.Time
 }
 
 type ips map[string]ipc
@@ -104,7 +105,7 @@ func getIpCount(ip string) int64 {
 	defer Dat.Unlock()
 
 	if _, ok := Dat.IpCount[ip]; ok == false {
-		Dat.IpCount[ip] = ipc{0, time.Now(), 0}
+		Dat.IpCount[ip] = ipc{0, time.Now(), 0, time.Now().Add(-1 * time.Hour)}
 	}
 
 	return Dat.IpCount[ip].Count
@@ -116,7 +117,7 @@ func incIpCount(ip string) {
 	defer Dat.Unlock()
 
 	if _, ok := Dat.IpCount[ip]; ok == false {
-		Dat.IpCount[ip] = ipc{0, time.Now(), 0}
+		Dat.IpCount[ip] = ipc{0, time.Now(), 0, time.Now().Add(-1 * time.Hour)}
 	}
 
 	if time.Since(Dat.IpCount[ip].Time).Seconds() > 60 {
@@ -124,13 +125,16 @@ func incIpCount(ip string) {
 		Dat.IpCount[ip] = ipc{
 			Dat.IpCount[ip].Count + 1,
 			time.Now(),
-			Dat.IpCount[ip].Count + 1}
+			Dat.IpCount[ip].Count + 1,
+			Dat.IpCount[ip].TimeEmail}
+
 	} else {
 
 		Dat.IpCount[ip] = ipc{
 			Dat.IpCount[ip].Count + 1,
 			Dat.IpCount[ip].Time,
-			Dat.IpCount[ip].TimeCount}
+			Dat.IpCount[ip].TimeCount,
+			Dat.IpCount[ip].TimeEmail}
 	}
 }
 
@@ -140,7 +144,9 @@ func decideInformer(ip string) {
 	defer Dat.Unlock()
 
 	if _, ok := Dat.IpCount[ip]; ok == false {
+
 		go callInformer(ip)
+
 	} else {
 
 		if strings.Contains(ip, "192.168.1.22") == false {
@@ -153,12 +159,17 @@ func decideInformer(ip string) {
 			if Dat.IpCount[ip].Count-Dat.IpCount[ip].TimeCount > 40 &&
 				time.Since(Dat.IpCount[ip].Time).Seconds() < 60 {
 
-				go callInformer(ip)
+				if time.Since(Dat.IpCount[ip].TimeEmail).Seconds() > 60 {
 
-				Dat.IpCount[ip] = ipc{
-					Dat.IpCount[ip].Count,
-					time.Now(),
-					Dat.IpCount[ip].Count}
+					go callInformer(ip)
+
+					Dat.IpCount[ip] = ipc{
+						Dat.IpCount[ip].Count,
+						time.Now(),
+						Dat.IpCount[ip].Count,
+						time.Now()}
+
+				}
 			}
 		}
 	}
