@@ -38,7 +38,7 @@ func init() {
 
 func main() {
 
-	runtime.GOMAXPROCS(runtime.NumCPU()*2 + 1)
+	runtime.GOMAXPROCS(runtime.NumCPU()*2 + 1
 
 	f, err := getFlags()
 	if err != nil {
