@@ -16,7 +16,13 @@ type flags struct {
 	url url.URL
 }
 
-type ips map[string]int64
+type ipc struct {
+	Count     int64
+	Time      time.Time
+	TimeCount int64
+}
+
+type ips map[string]ipc
 
 type counter struct {
 	sync.Mutex
@@ -27,7 +33,7 @@ var Dat *counter
 
 func init() {
 	Dat = new(counter)
-	Dat.IpCount = make(map[string]int64)
+	Dat.IpCount = make(map[string]ipc)
 }
 
 func main() {
@@ -83,6 +89,8 @@ func countIP(ipp string) string {
 		ipp = ipp[:n]
 	}
 
+	decideInformer(ipp)
+
 	incIpCount(ipp)
 
 	s := fmt.Sprintf("%v(%v)", ipp, getIpCount(ipp))
@@ -96,10 +104,10 @@ func getIpCount(ip string) int64 {
 	defer Dat.Unlock()
 
 	if _, ok := Dat.IpCount[ip]; ok == false {
-		Dat.IpCount[ip] = 0
+		Dat.IpCount[ip] = ipc{0, time.Now(), 0}
 	}
 
-	return Dat.IpCount[ip]
+	return Dat.IpCount[ip].Count
 }
 
 func incIpCount(ip string) {
@@ -108,12 +116,52 @@ func incIpCount(ip string) {
 	defer Dat.Unlock()
 
 	if _, ok := Dat.IpCount[ip]; ok == false {
-		Dat.IpCount[ip] = 0
-
-		go callInformer(ip)
+		Dat.IpCount[ip] = ipc{0, time.Now(), 0}
 	}
 
-	Dat.IpCount[ip]++
+	if time.Since(Dat.IpCount[ip].Time).Seconds() > 60 {
+
+		Dat.IpCount[ip] = ipc{
+			Dat.IpCount[ip].Count + 1,
+			time.Now(),
+			Dat.IpCount[ip].Count + 1}
+	} else {
+
+		Dat.IpCount[ip] = ipc{
+			Dat.IpCount[ip].Count + 1,
+			Dat.IpCount[ip].Time,
+			Dat.IpCount[ip].TimeCount}
+	}
+}
+
+func decideInformer(ip string) {
+
+	Dat.Lock()
+	defer Dat.Unlock()
+
+	if _, ok := Dat.IpCount[ip]; ok == false {
+		go callInformer(ip)
+	} else {
+
+		if strings.Contains(ip, "192.168.1.22") == false {
+
+			fmt.Printf("--------- ip: %v, sec: %v, delta: %v\n",
+				ip,
+				int(time.Since(Dat.IpCount[ip].Time).Seconds()),
+				Dat.IpCount[ip].Count-Dat.IpCount[ip].TimeCount)
+
+			if Dat.IpCount[ip].Count-Dat.IpCount[ip].TimeCount > 40 &&
+				time.Since(Dat.IpCount[ip].Time).Seconds() < 60 {
+
+				go callInformer(ip)
+
+				Dat.IpCount[ip] = ipc{
+					Dat.IpCount[ip].Count,
+					time.Now(),
+					Dat.IpCount[ip].Count}
+			}
+		}
+	}
 }
 
 func callInformer(ip string) {
